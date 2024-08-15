@@ -46,19 +46,36 @@ pragma solidity ^0.8.18;
 
 contract DCSEngine {
     /////////////////////
-    //errors           //
-    /////////////////////
+    //errors          //
+    ///////////////////
+    error DCSEngine__NeedMoreThanZero();
+
+    //////////////////////////////////////////
+    //State Variables //
+    ////////////////////////////////////////
+    mapping(address tokenAddress => address pricefeedAddress)
+        private s_priceFeeds; // tokenToPriceFeed
 
     /////////////////////
-    //Modifiers        //
-    /////////////////////
-    modifier amountNotZero() {
-        if (amountCollateral == 0) {
-            revert;
+    //Modifiers       //
+    ///////////////////
+    modifier moreThanZero(uint256 amount) {
+        if (amount == 0) {
+            revert DCSEngine__NeedMoreThanZero();
         }
         _;
     }
 
+    // modifier isAllowedToken(address token) {}
+
+    /////////////////////
+    //Functions       //
+    ///////////////////
+    constructor() {}
+
+    ///////////////////////
+    //External Functions//
+    /////////////////////
     function depositCollateralAndMintDsc() external {}
 
     /*
@@ -68,7 +85,7 @@ contract DCSEngine {
     function depositCollateral(
         address tokenCollateralAddress,
         uint256 amountCollateral
-    ) external {}
+    ) external moreThanZero(amountCollateral) {}
 
     function redeemCollateralForDsc() external {}
 
