@@ -25,6 +25,10 @@
 
 pragma solidity ^0.8.18;
 
+import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @title DCSEngine
  * @author Toshin Prince
@@ -43,18 +47,27 @@ pragma solidity ^0.8.18;
  * for minting and redeeming DSC, as well as depositing and withdrawing collateral.
  * @notice This contract is based on the MakerDAO DSS system
  */
-
-contract DCSEngine {
+contract DCSEngine is ReentrancyGuard {
     /////////////////////
     //errors          //
     ///////////////////
     error DCSEngine__NeedMoreThanZero();
+    error DCSEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
+    error DCSEngine__NotAllowedToken();
+    error DCSEngine__TransferFailed();
 
     //////////////////////////////////////////
     //State Variables //
     ////////////////////////////////////////
-    mapping(address tokenAddress => address pricefeedAddress)
-        private s_priceFeeds; // tokenToPriceFeed
+    mapping(address tokenAddress => address pricefeedAddress) private s_priceFeeds; // tokenToPriceFeed
+    mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
+
+    DecentralizedStableCoin private immutable i_dsc;
+
+    //////////////////////////////////////////
+    //Events //
+    ////////////////////////////////////////
+    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
 
     /////////////////////
     //Modifiers       //
@@ -66,12 +79,27 @@ contract DCSEngine {
         _;
     }
 
-    // modifier isAllowedToken(address token) {}
+    modifier isAllowedToken(address token) {
+        if (s_priceFeeds[token] == address(0)) {
+            revert DCSEngine__NotAllowedToken();
+        }
+        _;
+    }
 
     /////////////////////
     //Functions       //
     ///////////////////
-    constructor() {}
+    constructor(address[] memory tokenAddresses, address[] memory priceFeedAddresses, address dscAddress) {
+        //USD PriceFeed
+        if (tokenAddresses.length != priceFeedAddresses.length) {
+            revert DCSEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
+        }
+        for (uint256 i = 0; i < tokenAddresses.length; i++) {
+            s_priceFeeds[tokenAddresses[i]] = priceFeedAddresses[i];
+        }
+
+        i_dsc = DecentralizedStableCoin(dscAddress);
+    }
 
     ///////////////////////
     //External Functions//
@@ -82,10 +110,19 @@ contract DCSEngine {
      * @param tokenCollateralAddress The address of the token to deposit as collateral
      * @param amountCollateral the amount of the collateral to deposit
      */
-    function depositCollateral(
-        address tokenCollateralAddress,
-        uint256 amountCollateral
-    ) external moreThanZero(amountCollateral) {}
+    function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        external
+        moreThanZero(amountCollateral)
+        isAllowedToken(tokenCollateralAddress)
+        nonReentrant
+    {
+        s_collateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
+        emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
+        bool success = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral);
+        if (!success) {
+            revert DCSEngine__TransferFailed();
+        }
+    }
 
     function redeemCollateralForDsc() external {}
 
