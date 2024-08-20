@@ -61,6 +61,7 @@ contract DCSEngine is ReentrancyGuard {
     ////////////////////////////////////////
     mapping(address tokenAddress => address pricefeedAddress) private s_priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
+    mapping(address user => uint256 amountDscMinted) private s_DSCMinted;
 
     DecentralizedStableCoin private immutable i_dsc;
 
@@ -128,11 +129,48 @@ contract DCSEngine is ReentrancyGuard {
 
     function redeemCollateral() external {}
 
-    function mintDsc() external {}
+    /**
+     * @notice follows CEI
+     * @param amountDscToMint The amount of Decentralized stable coin to mint
+     * @notice they must have more collateral value than the threshold
+     */
+    function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
+        s_DSCMinted[msg.sender] += amountDscToMint;
+
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function burnDsc() external {}
 
     function liquidate() external {}
 
     function getHealthFactor() external {}
+
+    ///////////////////////////////////////
+    //Private and Internal View Functions//
+    //////////////////////////////////////
+
+    function _getAccountInformation(address user)
+        private
+        view
+        returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
+    {
+        totalDscMinted = s_DSCMinted[user];
+        // collateralValueInUsd = _getAccountCollateralValue(user);
+    }
+
+    /**
+     * Return how close to liqudation user is
+     * If the user is below 1, then the user gets liqudated
+     */
+    function _healthFactor(address user) private view returns (uint256) {
+        //Total DSC Minted
+        //Total Collateral Value
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
+    }
+
+    function _revertIfHealthFactorIsBroken(address user) internal view {
+        //1. Check Health Factor(do they have enough collateral?).
+        //2. Revert if they don't.
+    }
 }
