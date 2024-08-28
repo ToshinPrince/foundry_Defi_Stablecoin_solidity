@@ -6,7 +6,7 @@ import {Script} from "forge-std/Script.sol";
 import {MockV3Aggregator} from "../test/MockV3Aggregator.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
 
-contract HeplerConfig is Script {
+contract HelperConfig is Script {
     NetworkConfig public activeNetworkConfig;
 
     uint8 public constant DECIMALS = 8;
