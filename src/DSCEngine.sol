@@ -154,13 +154,23 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateralForDsc() external {}
+    function redeemCollateralForDsc(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToBurn)
+        external
+    {
+        burnDsc(amountDscToBurn);
+        redeemCollateral(tokenCollateralAddress, amountCollateral);
+        //redeemCollateral already checks health factor
+    }
 
     // In order to redeem collateral:
     // 1. Health Factor must be over 1 After collateral pulled.
     // DRY: Don't repeat your Self.
     //CEI: Check, Effects, Intractions
-    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral) external {
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        public
+        moreThanZero(amountCollateral)
+        nonReentrant
+    {
         s_collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
         emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
 
@@ -189,7 +199,17 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
-    function burnDsc() external {}
+    function burnDsc(uint256 amount) public moreThanZero(amount) {
+        s_DSCMinted[msg.sender] -= amount;
+        bool success = i_dsc.transferFrom(msg.sender, address(this), amount);
+
+        // This conditional is hypothitically unreachable
+        if (!success) {
+            revert DCSEngine__TransferFailed();
+        }
+        i_dsc.burn(amount);
+        _revertIfHealthFactorIsBroken(msg.sender); // I don't think this would ever hit...
+    }
 
     function liquidate() external {}
 
