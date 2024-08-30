@@ -67,6 +67,7 @@ contract DSCEngine is ReentrancyGuard {
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant MIN_HEALTH_FACTOR = 1e18;
+    uint256 private constant LIQUIDATION_BONUS = 10 //This means 10% Bonus.
 
     mapping(address tokenAddress => address pricefeedAddress) private s_priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
@@ -250,6 +251,25 @@ contract DSCEngine is ReentrancyGuard {
         if (userHealthFactor < MIN_HEALTH_FACTOR) {
             revert DCSEngine__BreakHealthFactor(userHealthFactor);
         }
+        // we want to burn their DSC "Debt"
+        // And take their collateral
+        // Bad user: $140 ETH, $100 DSC
+        // debtToCover = $100
+        // $100 of DSC == ??ETh
+        // 0.05 ETH
+
+        uint256 tokenAmountFromDebtCovered = getTokenAmountFromUsd(collateral, debtToCover);
+
+        // Add give then a 10% bonus
+        // So we are giving the liquidator $110 of WETH for $100 of DSC
+        // We should implement a features to liquidate in the event the protocol is insolvent
+        // And sweep extra amount money into Treasury
+
+        //0.05 * 0.1 = 0.055. Getting 0.055
+        uint256 bonusCollateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
+
+        uint256 totalCollateralToReddem = tokenAmountFromDebtCovered + bonusCollateral;
+
     }
 
     function getHealthFactor() external {}
@@ -297,6 +317,17 @@ contract DSCEngine is ReentrancyGuard {
     ////////////////////////////////////////
     //Public and External view Functions //
     //////////////////////////////////////
+
+    function getTokenAmountFromUsd(address token, uint256 usdAmountInWei) public view returns (uint256) {
+        //price of ETH Token
+        //$/ETH ETH ??
+        //$2000/ETH. $1000 = 0.5 ETH
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        //(10e18 * 1e18) / ($2000e18 * 1e18)
+        return (usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION);
+    }
+
     function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
         //loop through each collateral token, get the amount they have deposited, and map it to
         //the price, to get the USD value.
