@@ -66,7 +66,7 @@ contract DSCEngine is ReentrancyGuard {
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
-    uint256 private constant MIN_HEALTH_FACTOR = 1;
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
 
     mapping(address tokenAddress => address pricefeedAddress) private s_priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
@@ -154,6 +154,13 @@ contract DSCEngine is ReentrancyGuard {
         }
     }
 
+    /**
+     *
+     * @param tokenCollateralAddress The collateral address to redeem
+     * @param amountCollateral The amount of collateral to redeem
+     * @param amountDscToBurn The amount of DSC to Burn
+     * This function burns DSC and redeem underlying collateral in one transaction.
+     */
     function redeemCollateralForDsc(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToBurn)
         external
     {
@@ -211,7 +218,39 @@ contract DSCEngine is ReentrancyGuard {
         _revertIfHealthFactorIsBroken(msg.sender); // I don't think this would ever hit...
     }
 
-    function liquidate() external {}
+    //if we do start nearing undercollaterization, we need someone to liquidate position
+
+    //$100 ETH backing $50 DSC
+    //$20 ETH back $50 DSC <- DSC is't Worth $1
+
+    //$75 Eth backing $50 DSC
+    //Liquidator will take $75 backing and burns off the $50 DSC
+
+    //If someone is almost undercollatarized, we will pay you to liquidate them!
+
+    /**
+     *
+     * @param collateral The erc20 collateral address to liquidate from the user
+     * @param user The user who have broken the health factor. Their _healthFactor should be below MIN_HEALTH_FACTOR
+     * @param debtToCover The amount of DSC you want to burn to improve the user health factor
+     * @notice you can partially liquidate a user.
+     * @notice you will get a liquidation bonus for taking the users funds.
+     * @notice This function working assumes that the protocol will be roughly 200% overcollateralized in order for this to work.
+     * @notice A known bug would be if the protocol was only 100% collateralized, we wouldn't be able to liquidate anyone
+     * For example, if the price of the collateral plummeted before anyone could be liquidated.
+     * Follows CEI: Checks, Effects, Interactions.
+     */
+    function liquidate(address collateral, address user, uint256 debtToCover)
+        external
+        moreThanZero(debtToCover)
+        nonReentrant
+    {
+        //need to check health factor of user
+        uint256 userHealthFactor = _healthFactor(user);
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
+            revert DCSEngine__BreakHealthFactor(userHealthFactor);
+        }
+    }
 
     function getHealthFactor() external {}
 
