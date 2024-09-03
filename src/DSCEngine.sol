@@ -67,7 +67,7 @@ contract DSCEngine is ReentrancyGuard {
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant MIN_HEALTH_FACTOR = 1e18;
-    uint256 private constant LIQUIDATION_BONUS = 10 //This means 10% Bonus.
+    uint256 private constant LIQUIDATION_BONUS = 10; //This means 10% Bonus.
 
     mapping(address tokenAddress => address pricefeedAddress) private s_priceFeeds; // tokenToPriceFeed
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
@@ -80,7 +80,9 @@ contract DSCEngine is ReentrancyGuard {
     //Events //
     ////////////////////////////////////////
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
-    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(
+        address indexed redeemFrom, address indexed redeemedTo, address indexed token, uint256 indexed amount
+    );
 
     /////////////////////
     //Modifiers       //
@@ -179,14 +181,7 @@ contract DSCEngine is ReentrancyGuard {
         moreThanZero(amountCollateral)
         nonReentrant
     {
-        s_collateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
-        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
-
-        //_calculateHealthFactorAfter
-        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
-        if (!success) {
-            revert DCSEngine__TransferFailed();
-        }
+        _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
 
         _revertIfHealthFactorIsBroken(msg.sender);
     }
@@ -268,8 +263,8 @@ contract DSCEngine is ReentrancyGuard {
         //0.05 * 0.1 = 0.055. Getting 0.055
         uint256 bonusCollateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
 
-        uint256 totalCollateralToReddem = tokenAmountFromDebtCovered + bonusCollateral;
-
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtCovered + bonusCollateral;
+        _redeemCollateral(collateral, totalCollateralToRedeem, user, msg.sender);
     }
 
     function getHealthFactor() external {}
@@ -277,6 +272,19 @@ contract DSCEngine is ReentrancyGuard {
     ///////////////////////////////////////
     //Private and Internal View Functions//
     //////////////////////////////////////
+
+    function _redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral, address from, address to)
+        private
+    {
+        s_collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
+
+        //_calculateHealthFactorAfter
+        bool success = IERC20(tokenCollateralAddress).transfer(to, amountCollateral);
+        if (!success) {
+            revert DCSEngine__TransferFailed();
+        }
+    }
 
     function _getAccountInformation(address user)
         private
