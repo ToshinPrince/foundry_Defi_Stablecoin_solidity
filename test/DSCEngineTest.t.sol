@@ -30,8 +30,8 @@ contract DSCEngineTest is Test {
     }
 
     ///////////////////////////
-    /// Constructor Test     //
-    ///////////////////////////
+    /// Constructor Test    //
+    /////////////////////////
     address[] public tokenAddresses;
     address[] public priceFeedAddresses;
 
@@ -53,6 +53,14 @@ contract DSCEngineTest is Test {
         uint256 expectedUsd = 30000e18;
         uint256 actualUsd = dsce.getUsdValue(weth, ethAmount);
         assertEq(expectedUsd, actualUsd);
+    }
+
+    function testGetTokenAmountFromUsd() public {
+        uint256 usdAmount = 100 ether;
+        //$2000/ ETH = 0.05
+        uint256 expectedWeth = 0.05 ether;
+        uint256 actualWeth = dsce.getTokenAmountFromUsd(weth, usdAmount);
+        assertEq(expectedWeth, actualWeth);
     }
 
     ////////////////////////////////////
