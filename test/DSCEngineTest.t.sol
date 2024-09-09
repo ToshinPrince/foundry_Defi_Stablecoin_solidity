@@ -82,4 +82,118 @@ contract DSCEngineTest is Test {
         vm.expectRevert(DSCEngine.DCSEngine__NotAllowedToken.selector);
         dsce.depositCollateral(address(ranToken), AMOUNT_COLLATERAL);
     }
+
+    modifier depositedCollateral() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+
+    function testCanDepositCollateralAndGetAccountInfo() public depositedCollateral {
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(USER);
+
+        uint256 expectedTotalDscMinted = 0;
+        uint256 expectedDepositAmount = dsce.getTokenAmountFromUsd(weth, collateralValueInUsd);
+        assertEq(totalDscMinted, expectedTotalDscMinted);
+        assertEq(AMOUNT_COLLATERAL, expectedDepositAmount);
+    }
+
+    //-------------------------------------------------------------------------------------
+    ////////////////////////////////////
+    /// depositCollateralAndMintDsc ///
+    //////////////////////////////////
+
+    function testDepositCollateralAndMintDsc() public {
+        vm.startPrank(USER);
+
+        // // Set the expectations for the emitted event
+        // vm.expectEmit(true, true, true, true); // Parameters for indexed events
+        // emit CollateralDeposited(USER, weth, AMOUNT_COLLATERAL);
+
+        // Approve the contract to spend the collateral
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+
+        // Deposit collateral and mint DSC
+        uint256 amountDscToMint = 100 ether;
+        dsce.depositCollateralAndMintDsc(weth, AMOUNT_COLLATERAL, amountDscToMint);
+
+        vm.stopPrank();
+    }
+
+    ////////////////////////////////////
+    /// mintDsc ///
+    //////////////////////////////////
+    function testMintDscZeroAmountReverts() public {
+        uint256 zeroAmount = 0;
+
+        // Start impersonating the user
+        vm.startPrank(USER);
+
+        // Expect the minting function to revert because the amount is zero
+        vm.expectRevert(DCSEngine__AmountMustBeMoreThanZero.selector);
+        dsce.mintDsc(zeroAmount);
+
+        vm.stopPrank();
+    }
+
+    function testMintDscSuccessful() public {
+        uint256 amountToMint = 100 ether; // Example amount to mint
+
+        // Assuming the user has already deposited enough collateral to maintain a healthy factor
+        vm.startPrank(USER);
+
+        // Approve collateral and deposit
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+
+        // Now try to mint the DSC tokens
+        dsce.mintDsc(amountToMint);
+
+        // Check that the DSC was minted successfully
+        assertEq(dsce.s_DSCMinted(USER), amountToMint);
+        assertEq(i_dsc.balanceOf(USER), amountToMint);
+
+        vm.stopPrank();
+    }
+
+    function testMintDscHealthFactorBrokenReverts() public {
+        uint256 amountToMint = 100 ether; // Example amount to mint
+
+        // Manipulate the health factor to be broken
+        vm.startPrank(USER);
+
+        // This would be some setup that breaks the health factor
+        // E.g., if the price of the collateral drops or too much DSC is minted
+
+        // Expect the mint to revert due to health factor being broken
+        vm.expectRevert(DCSEngine__HealthFactorBroken.selector);
+        dsce.mintDsc(amountToMint);
+
+        vm.stopPrank();
+    }
+
+    function testMintDscMintingFailsReverts() public {
+        uint256 amountToMint = 100 ether; // Example amount to mint
+
+        vm.startPrank(USER);
+
+        // Setup the necessary collateral deposit
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+
+        // Simulate a failure in the DSC mint function (e.g., mocking the mint function to return false)
+        vm.mockCall(
+            address(i_dsc),
+            abi.encodeWithSelector(DSC.mint.selector, USER, amountToMint),
+            abi.encode(false) // Simulate minting failure
+        );
+
+        // Expect minting to revert
+        vm.expectRevert(DCSEngine__MintFailed.selector);
+        dsce.mintDsc(amountToMint);
+
+        vm.stopPrank();
+    }
 }
