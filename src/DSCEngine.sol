@@ -25,10 +25,10 @@
 
 pragma solidity ^0.8.18;
 
-import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 
 /**
  * @title DCSEngine
@@ -54,7 +54,7 @@ contract DSCEngine is ReentrancyGuard {
     ///////////////////
     error DCSEngine__NeedMoreThanZero();
     error DCSEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
-    error DCSEngine__NotAllowedToken();
+    error DSCEngine__TokenNotAllowed();
     error DSCEngine__TransferFailed();
     error DCSEngine__BreakHealthFactor(uint256 userHealthFactor);
     error DCSEngine__MintFailed();
@@ -64,6 +64,9 @@ contract DSCEngine is ReentrancyGuard {
     //////////////////////////////////////////
     //State Variables //
     ////////////////////////////////////////
+
+    DecentralizedStableCoin private immutable i_dsc;
+
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
@@ -76,8 +79,6 @@ contract DSCEngine is ReentrancyGuard {
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
     mapping(address user => uint256 amountDscMinted) private s_DSCMinted;
     address[] private s_collateralTokens;
-
-    DecentralizedStableCoin private immutable i_dsc;
 
     //////////////////////////////////////////
     //Events //
@@ -97,7 +98,7 @@ contract DSCEngine is ReentrancyGuard {
 
     modifier isAllowedToken(address token) {
         if (s_priceFeeds[token] == address(0)) {
-            revert DCSEngine__NotAllowedToken();
+            revert DSCEngine__TokenNotAllowed();
         }
         _;
     }
@@ -171,7 +172,7 @@ contract DSCEngine is ReentrancyGuard {
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
-    function burnDsc(uint256 amount) extrenal moreThanZero(amount) {
+    function burnDsc(uint256 amount) external moreThanZero(amount) {
         _burnDsc(amount, msg.sender, msg.sender);
         _revertIfHealthFactorIsBroken(msg.sender); // I don't think this would ever hit...
     }
@@ -379,7 +380,7 @@ contract DSCEngine is ReentrancyGuard {
     ////////////////////////////////////////////////////////////////////////////
 
     function calculateHealthFactor(uint256 totalDscMinted, uint256 collateralValueInUsd)
-        public
+        external
         view
         returns (uint256)
     {
@@ -391,14 +392,19 @@ contract DSCEngine is ReentrancyGuard {
         view
         returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
     {
-        (totalDscMinted, collateralValueInUsd) = _getAccountInformation(user);
+        // (totalDscMinted, collateralValueInUsd) = _getAccountInformation(user);
+        return _getAccountInformation(user);
     }
 
-    function getUsdValue(address token, uint256 amount) public view returns (uint256) {
+    function getUsdValue(address token, uint256 amount) external view returns (uint256) {
         return _getUsdValue(token, amount);
     }
 
-    function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
+    function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+        return s_collateralDeposited[user][token];
+    }
+
+    function getAccountCollateralValue(address user) external view returns (uint256 totalCollateralValueInUsd) {
         //loop through each collateral token, get the amount they have deposited, and map it to
         //the price, to get the USD value.
         for (uint256 i = 0; i < s_collateralTokens.length; i++) {
