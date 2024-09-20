@@ -37,6 +37,13 @@ contract Handler is Test {
         vm.stopPrank();
     }
 
+    function mintDsc(uint256 amount) public {
+        amount = bound(amount, 1, MAX_DEPOSIT_SIZE);
+        vm.startPrank(msg.sender);
+        dsce.mintDsc(amount);
+        vm.stopBroadcast();
+    }
+
     function redeemCollateral(uint256 collateralSeed, uint256 amountCollateral) public {
         ERC20Mock collateral = _getCollateralFromSeed(collateralSeed);
         uint256 maxCollateralToRedeem = dsce.getCollateralBalanceOfUser(msg.sender, address(collateral));
